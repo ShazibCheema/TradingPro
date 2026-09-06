@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "440035217980",
+    "project_id": "tradingpro-6c1ac",
+    "storage_bucket": "tradingpro-6c1ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:440035217980:android:5095d06085cd6fde73e939",
+        "android_client_info": {
+          "package_name": "com.tradingpro.it.tradingpro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAb3kMB972EJ2s0NsilDSPq_MhYh2JqeEk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

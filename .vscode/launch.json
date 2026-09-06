@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TradingPro: User (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--flavor",
+        "user"
+      ]
+    },
+    {
+      "name": "TradingPro: Admin (Debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "args": [
+        "--flavor",
+        "admin"
+      ]
+    },
+    {
+      "name": "TradingPro: User (Release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "args": [
+        "--flavor",
+        "user"
+      ]
+    },
+    {
+      "name": "TradingPro: Admin (Release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_admin.dart",
+      "flutterMode": "release",
+      "args": [
+        "--flavor",
+        "admin"
+      ]
+    }
+  ]
+}
