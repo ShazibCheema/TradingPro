@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.role == 'admin' || request.auth.token.role == 'superAdmin');
+    }
+
+    // ─── Users Collection ────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Profile updates (restrict financial fields)
+      allow update: if isOwner(userId) && 
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['balance', 'profit', 'accountStatus', 'userId7', 'email'])
+        || isAdmin();
+
+      allow create, delete: if false; // Functions only
+
+      // Devices (FCM Tokens) - FULL ACCESS for owner
+      match /devices/{deviceId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      // Notifications - User can read and mark as read (update)
+      match /notifications/{notifId} {
+        allow read, update: if isOwner(userId) || isAdmin();
+        allow create, delete: if isAdmin();
+      }
+
+      // Transactions, Deposits, Withdrawals, Trades (Read-only for owner)
+      match /transactions/{txId} { allow read: if isOwner(userId) || isAdmin(); }
+      match /deposits/{depositId} { allow read: if isOwner(userId) || isAdmin(); }
+      match /withdrawals/{withdrawalId} { allow read: if isOwner(userId) || isAdmin(); }
+      match /trades/{tradeId} { allow read: if isOwner(userId) || isAdmin(); }
+      match /notificationPrefs/{prefId} { allow read, write: if isOwner(userId); }
+    }
+
+    // ─── Global Collections ──────────────────────────────────────────────────
+    match /coins/{coinId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() && (
+        resource == null ||
+        resource.data.marketDataMode != 'live' ||
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['latestPrice', 'priceChangePercent24h', 'marketDataStatus', 'lastMarketUpdate'])
+      );
+    }
+    match /depositMethods/{methodId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    match /appSettings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    match /auditLogs/{auditId} {
+      allow read: if isAdmin();
+    }
+    match /adminNotifications/{notifId} {
+      allow read: if isAdmin();
+    }
+
+    // ─── Support System ──────────────────────────────────────────────────────
+    match /supportConversations/{convId} {
+      allow read, update: if isAuthenticated() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
+      allow create: if isAuthenticated();
+
+      match /messages/{messageId} {
+        allow read, create: if isAuthenticated();
+      }
+    }
+
+    // ─── Collection Group Queries (Admin Dashboard) ──────────────────────────
+    match /{path=**}/deposits/{depositId} { allow read: if isAdmin(); }
+    match /{path=**}/withdrawals/{withdrawalId} { allow read: if isAdmin(); }
+    match /{path=**}/trades/{tradeId} { allow read: if isAdmin(); }
+    match /{path=**}/messages/{messageId} { allow read: if isAdmin(); }
+  }
+}
