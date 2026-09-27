@@ -66,6 +66,8 @@ class SupportMessageModel {
   final MessageSenderRole senderRole;
   final String senderName;
   final String content;
+  final String? attachmentUrl;
+  final String? messageType; // 'text' | 'image' | 'file'
   final DateTime createdAt;
 
   const SupportMessageModel({
@@ -75,12 +77,16 @@ class SupportMessageModel {
     required this.senderRole,
     required this.senderName,
     required this.content,
+    this.attachmentUrl,
+    this.messageType,
     required this.createdAt,
   });
 
   bool get isUser => senderRole == MessageSenderRole.user;
   bool get isAdmin => senderRole == MessageSenderRole.admin;
   bool get isSystem => senderRole == MessageSenderRole.system;
+  bool get hasAttachment => attachmentUrl != null && attachmentUrl!.isNotEmpty;
+  bool get isImageMessage => messageType == 'image' || hasAttachment;
 
   factory SupportMessageModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
@@ -94,6 +100,9 @@ class SupportMessageModel {
       ),
       senderName: data['senderName'] as String? ?? '',
       content: data['content'] as String? ?? '',
+      attachmentUrl: data['attachmentUrl'] as String?,
+      messageType: data['messageType'] as String? ??
+          (data['attachmentUrl'] != null ? 'image' : 'text'),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -105,6 +114,8 @@ class SupportMessageModel {
       'senderRole': senderRole.name,
       'senderName': senderName,
       'content': content,
+      if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+      'messageType': messageType ?? (attachmentUrl != null ? 'image' : 'text'),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }

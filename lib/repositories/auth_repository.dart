@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -74,6 +76,38 @@ class AuthRepository {
       );
       await user.reauthenticateWithCredential(credential);
       await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    }
+  }
+
+  /// Update temporary password (enforces new != temp and clears mustChangePassword)
+  Future<void> updateTemporaryPassword({
+    required String temporaryPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not authenticated');
+
+      if (temporaryPassword.trim() == newPassword.trim()) {
+        throw Exception(
+            'New password cannot be the same as your temporary password. Please choose a new password.');
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: temporaryPassword.trim(),
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword.trim());
+
+      // Clear flags in Firestore
+      await _db.collection('users').doc(user.uid).update({
+        'mustChangePassword': false,
+        'isTemporaryPassword': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
     }

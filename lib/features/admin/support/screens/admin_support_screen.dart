@@ -127,18 +127,54 @@ class _AdminSupportScreenState extends ConsumerState<AdminSupportScreen> {
                           ),
                           title: Row(
                             children: [
-                              Text(
-                                conv.userFullName,
-                                style: AppTextStyles.body
-                                    .copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'ID: ${conv.userId7}',
-                                style: AppTextStyles.caption.copyWith(
-                                  fontWeight: FontWeight.w600,
+                              Flexible(
+                                child: Text(
+                                  conv.userFullName,
+                                  style: AppTextStyles.body
+                                      .copyWith(fontWeight: FontWeight.w700),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              if (conv.userId.startsWith('guest_')) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.pendingLight,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: AppColors.pending.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.person_off_rounded,
+                                          size: 11, color: AppColors.pending),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'GUEST RECOVERY',
+                                        style: AppTextStyles.caption.copyWith(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.pending,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ] else ...[
+                                Text(
+                                  'ID: ${conv.userId7}',
+                                  style: AppTextStyles.caption.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
                               const Spacer(),
                               StatusBadge(
                                 label: conv.status.name.toUpperCase(),

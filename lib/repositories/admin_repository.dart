@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -283,19 +282,36 @@ class AdminRepository {
     }
   }
 
-  /// Upload coin logo to Firebase Storage
-  Future<String> uploadCoinLogo(String coinId, File file) async {
-    final ext = file.path.split('.').last;
-    final ref = _storage.ref().child('coin-logos').child('${coinId}_${const Uuid().v4()}.$ext');
-    final task = await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+  /// Upload coin logo to Firebase Storage (cross-platform web/mobile)
+  Future<String> uploadCoinLogo(String coinId, Uint8List bytes, {String fileExt = 'png'}) async {
+    final cleanExt = fileExt.replaceAll('.', '').toLowerCase();
+    final ref = _storage.ref().child('coin-logos').child('${coinId}_${const Uuid().v4()}.$cleanExt');
+    final task = await ref.putData(bytes, SettableMetadata(contentType: 'image/$cleanExt'));
     return await task.ref.getDownloadURL();
   }
 
-  /// Upload deposit method QR Code to Firebase Storage
-  Future<String> uploadQrCode(String methodId, File file) async {
-    final ext = file.path.split('.').last;
-    final ref = _storage.ref().child('qr-codes').child('${methodId}_${const Uuid().v4()}.$ext');
-    final task = await ref.putFile(file, SettableMetadata(contentType: 'image/$ext'));
+  /// Upload deposit method QR Code to Firebase Storage (cross-platform web/mobile)
+  Future<String> uploadQrCode(String methodId, Uint8List bytes, {String fileExt = 'png'}) async {
+    final cleanExt = fileExt.replaceAll('.', '').toLowerCase();
+    final ref = _storage.ref().child('qr-codes').child('${methodId}_${const Uuid().v4()}.$cleanExt');
+    final task = await ref.putData(bytes, SettableMetadata(contentType: 'image/$cleanExt'));
     return await task.ref.getDownloadURL();
+  }
+
+  /// Set a temporary password for a user via Cloud Function (admin only).
+  /// The user will be required to change this password on next login.
+  Future<void> setTemporaryPassword({
+    required String userId,
+    required String temporaryPassword,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable('setTemporaryPassword');
+      await callable.call({
+        'userId': userId,
+        'temporaryPassword': temporaryPassword,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? 'Failed to set temporary password.');
+    }
   }
 }

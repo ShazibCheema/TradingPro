@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
+import 'package:go_router/go_router.dart';
 
 class WithdrawDetailsScreen extends StatefulWidget {
   const WithdrawDetailsScreen({super.key});
@@ -66,10 +68,20 @@ class _WithdrawDetailsScreenState extends State<WithdrawDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Withdraw Details'),
-      body: _isLoading
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.profile);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Withdraw Details', fallbackRoute: AppRoutes.profile),
+        body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
@@ -127,6 +139,7 @@ class _WithdrawDetailsScreenState extends State<WithdrawDetailsScreen> {
                 ),
               ),
             ),
+      ),
     );
   }
 }

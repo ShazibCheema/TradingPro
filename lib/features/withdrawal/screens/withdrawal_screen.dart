@@ -7,6 +7,8 @@ import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_formatters.dart';
 import 'package:tradingpro/core/utils/app_validators.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
+import 'package:go_router/go_router.dart';
 
 class WithdrawalScreen extends ConsumerStatefulWidget {
   const WithdrawalScreen({super.key});
@@ -115,10 +117,20 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
         .firstWhere((a) => a.$1 == _selectedAsset)
         .$2;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Withdraw Funds'),
-      body: SingleChildScrollView(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.home);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Withdraw Funds', fallbackRoute: AppRoutes.home),
+        body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Form(
           key: _formKey,
@@ -302,7 +314,7 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildSubmittedSuccess() {
@@ -347,8 +359,14 @@ class _WithdrawalScreenState extends ConsumerState<WithdrawalScreen> {
               const StatusBadge(label: 'Pending Approval', type: StatusType.pending),
               const SizedBox(height: 36),
               PrimaryButton(
-                label: 'Back to Account',
-                onPressed: () => Navigator.of(context).pop(),
+                label: 'Back to Home',
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go(AppRoutes.home);
+                  }
+                },
                 width: 200,
               ),
             ],

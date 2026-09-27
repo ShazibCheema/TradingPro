@@ -1,4 +1,6 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tradingpro/providers/app_providers.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
@@ -373,6 +375,202 @@ class _AdminUserDetailScreenState
     );
   }
 
+  void _showSetTemporaryPasswordDialog(UserModel user) {
+    final tempPassCtrl = TextEditingController();
+    bool obscure = false;
+
+    String _generateRandomPassword() {
+      final rng = Random.secure();
+      final chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#\$';
+      final password = List.generate(10, (_) => chars[rng.nextInt(chars.length)]).join();
+      return 'Tmp\$$password';
+    }
+
+    tempPassCtrl.text = _generateRandomPassword();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_reset_rounded,
+                      color: AppColors.primary, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Set Temporary Password', style: AppTextStyles.h4),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'User: ${user.fullName} (ID: ${user.userId7})',
+                    style: AppTextStyles.captionMedium.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceVariant,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded,
+                            color: AppColors.primary, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This password will replace the user\'s current password. They will be forced to change it upon next login.',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textPrimary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: tempPassCtrl,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Temporary Password',
+                      prefixIcon: const Icon(Icons.password_rounded),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(obscure
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () =>
+                                setDialogState(() => obscure = !obscure),
+                          ),
+                          IconButton(
+                            tooltip: 'Copy to clipboard',
+                            icon: const Icon(Icons.copy_rounded, size: 20),
+                            onPressed: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: tempPassCtrl.text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Password copied to clipboard'),
+                                  duration: Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.autorenew_rounded, size: 16),
+                      label: const Text('Generate New'),
+                      onPressed: () {
+                        setDialogState(() {
+                          tempPassCtrl.text = _generateRandomPassword();
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
+                icon: const Icon(Icons.lock_reset_rounded, size: 18),
+                label: const Text('Set Password'),
+                onPressed: () async {
+                  final tempPass = tempPassCtrl.text.trim();
+                  if (tempPass.isEmpty || tempPass.length < 6) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content:
+                            Text('Password must be at least 6 characters.'),
+                        backgroundColor: AppColors.negative,
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.of(ctx).pop();
+                  await _executeSetTemporaryPassword(user, tempPass);
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _executeSetTemporaryPassword(
+      UserModel user, String tempPassword) async {
+    setState(() => _isActionLoading = true);
+    try {
+      await ref.read(adminRepositoryProvider).setTemporaryPassword(
+            userId: user.uid,
+            temporaryPassword: tempPassword,
+          );
+
+      if (mounted) {
+        // Copy password to clipboard for easy sharing via support chat
+        await Clipboard.setData(ClipboardData(text: tempPassword));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Temporary password set for ${user.fullName}! Copied to clipboard.'),
+            backgroundColor: AppColors.positive,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to set temporary password: $e'),
+            backgroundColor: AppColors.negative,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isActionLoading = false);
+    }
+  }
+
   Future<void> _toggleAccountStatus(UserModel user) async {
     final newStatus = user.isActive
         ? AccountStatus.suspended
@@ -582,6 +780,19 @@ class _AdminUserDetailScreenState
                             onPressed: _isActionLoading
                                 ? null
                                 : () => _showAdjustmentDialog(user),
+                          ),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.lock_reset_rounded,
+                                size: 18),
+                            label: const Text('Set Temp Password'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.pending,
+                              minimumSize: const Size(150, 48),
+                            ),
+                            onPressed: _isActionLoading
+                                ? null
+                                : () =>
+                                    _showSetTemporaryPasswordDialog(user),
                           ),
                           OutlinedButton.icon(
                             icon: Icon(

@@ -7,6 +7,7 @@ import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_formatters.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
 import 'package:tradingpro/shared_widgets/market_data_widgets.dart';
+import 'package:tradingpro/shared_widgets/coin_logo_widget.dart';
 import 'package:tradingpro/router/user_router.dart';
 
 class MarketScreen extends ConsumerStatefulWidget {
@@ -30,10 +31,20 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
   Widget build(BuildContext context) {
     final allCoinsAsync = ref.watch(activeCoinsProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Markets'),
-      body: Column(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.home);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Markets', fallbackRoute: AppRoutes.home),
+        body: Column(
         children: [
           // Search Input
           Padding(
@@ -126,23 +137,10 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                               flex: 2,
                               child: Row(
                                 children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.gray100,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: coin.logoUrl != null
-                                        ? ClipOval(
-                                            child: Image.network(
-                                              coin.logoUrl!,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
-                                                  _CoinLetter(coin.symbol),
-                                            ),
-                                          )
-                                        : _CoinLetter(coin.symbol),
+                                  CoinLogoWidget(
+                                    logoUrl: coin.logoUrl,
+                                    symbol: coin.symbol,
+                                    size: 40,
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -243,26 +241,6 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _CoinLetter extends StatelessWidget {
-  final String symbol;
-  const _CoinLetter(this.symbol);
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        symbol.isNotEmpty ? symbol[0].toUpperCase() : '?',
-        style: const TextStyle(
-          fontFamily: 'Inter',
-          fontWeight: FontWeight.w700,
-          color: AppColors.primary,
-          fontSize: 14,
-        ),
-      ),
-    );
+    ));
   }
 }

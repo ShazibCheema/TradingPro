@@ -47,7 +47,7 @@ service cloud.firestore {
 
     // ─── Global Collections ──────────────────────────────────────────────────
     match /coins/{coinId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create, delete: if isAdmin();
       allow update: if isAdmin() && (
         resource == null ||
@@ -56,11 +56,11 @@ service cloud.firestore {
       );
     }
     match /depositMethods/{methodId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAdmin();
     }
     match /appSettings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAdmin();
     }
     match /auditLogs/{auditId} {
@@ -72,11 +72,11 @@ service cloud.firestore {
 
     // ─── Support System ──────────────────────────────────────────────────────
     match /supportConversations/{convId} {
-      allow read, update: if isAuthenticated() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
-      allow create: if isAuthenticated();
+      allow read, update: if true;
+      allow create: if true;
 
       match /messages/{messageId} {
-        allow read, create: if isAuthenticated();
+        allow read, create: if true;
       }
     }
 

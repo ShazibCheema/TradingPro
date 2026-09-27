@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tradingpro/core/constants/app_constants.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
+import 'package:tradingpro/router/user_router.dart';
 
 /// Primary purple action button
 class PrimaryButton extends StatelessWidget {
@@ -396,22 +398,34 @@ class TradingProAppBar extends StatelessWidget
   final String title;
   final List<Widget>? actions;
   final bool showBack;
+  final VoidCallback? onBackPressed;
+  final String fallbackRoute;
 
   const TradingProAppBar({
     super.key,
     required this.title,
     this.actions,
     this.showBack = true,
+    this.onBackPressed,
+    this.fallbackRoute = AppRoutes.home,
   });
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
       title: Text(title, style: AppTextStyles.h3),
-      automaticallyImplyLeading: showBack,
+      automaticallyImplyLeading: false,
       leading: showBack
           ? IconButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (onBackPressed != null) {
+                  onBackPressed!();
+                } else if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go(fallbackRoute);
+                }
+              },
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
             )
           : null,

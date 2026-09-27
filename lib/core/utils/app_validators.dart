@@ -28,20 +28,20 @@ class AppValidators {
     }
 
     // Block placeholder/dummy local-parts
-    const _blockedLocalParts = {
+    const blockedLocalParts = {
       'dummy', 'test', 'testing', 'fake', 'fakeuser', 'noreply', 'no-reply',
       'donotreply', 'example', 'sample', 'demo', 'temp', 'temporary',
       'user', 'user1', 'user123', 'abc', 'abcd', 'abcde', 'xyz', 'foo',
       'bar', 'qwerty', 'asdf', 'admin', 'administrator', 'root',
       'null', 'undefined', 'none', 'na', 'noemail',
     };
-    if (_blockedLocalParts.contains(localPart)) {
+    if (blockedLocalParts.contains(localPart)) {
       return 'Please enter your real email address';
     }
 
     // Block known disposable/throwaway email domains
     final domain = trimmed.split('@').last;
-    const _disposableDomains = {
+    const disposableDomains = {
       'mailinator.com', 'guerrillamail.com', 'guerrillamail.net',
       'guerrillamail.org', 'yopmail.com', 'tempmail.com', 'temp-mail.org',
       'throwaway.email', 'dispostable.com', 'trashmail.com', 'trashmail.net',
@@ -49,7 +49,7 @@ class AppValidators {
       'getairmail.com', 'filzmail.com', 'discard.email', '10minutemail.com',
       'burnermail.io', 'spamgourmet.com', 'mailnull.com', 'spamcero.com',
     };
-    if (_disposableDomains.contains(domain)) {
+    if (disposableDomains.contains(domain)) {
       return 'Disposable email addresses are not allowed';
     }
 

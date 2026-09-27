@@ -9,6 +9,7 @@ import 'package:tradingpro/models/coin_model.dart';
 import 'package:tradingpro/models/user_model.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
 import 'package:tradingpro/shared_widgets/market_data_widgets.dart';
+import 'package:tradingpro/shared_widgets/coin_logo_widget.dart';
 import 'package:tradingpro/shared_widgets/price_chart.dart';
 import 'package:tradingpro/router/user_router.dart';
 import 'package:flutter/services.dart';
@@ -380,22 +381,10 @@ class _FeaturedCoinCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Coin logo or placeholder
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.gray100,
-                  shape: BoxShape.circle,
-                ),
-                child: coin.logoUrl != null
-                    ? ClipOval(
-                        child: Image.network(
-                          coin.logoUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _CoinInitial(coin.symbol),
-                        ),
-                      )
-                    : _CoinInitial(coin.symbol),
+              CoinLogoWidget(
+                logoUrl: coin.logoUrl,
+                symbol: coin.symbol,
+                size: 36,
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -795,23 +784,10 @@ class _CoinListTile extends StatelessWidget {
             flex: 2,
             child: Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.gray100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: coin.logoUrl != null
-                      ? ClipOval(
-                          child: Image.network(
-                            coin.logoUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                _CoinInitial(coin.symbol),
-                          ),
-                        )
-                      : _CoinInitial(coin.symbol),
+                CoinLogoWidget(
+                  logoUrl: coin.logoUrl,
+                  symbol: coin.symbol,
+                  size: 40,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -921,24 +897,3 @@ class _MarketListSkeleton extends StatelessWidget {
   }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-class _CoinInitial extends StatelessWidget {
-  final String symbol;
-  const _CoinInitial(this.symbol);
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        symbol.isNotEmpty ? symbol[0].toUpperCase() : '?',
-        style: const TextStyle(
-          fontFamily: 'Inter',
-          fontWeight: FontWeight.w700,
-          color: AppColors.primary,
-          fontSize: 14,
-        ),
-      ),
-    );
-  }
-}

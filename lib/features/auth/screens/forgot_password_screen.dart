@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tradingpro/providers/app_providers.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_validators.dart';
 import 'package:tradingpro/core/utils/app_snackbar.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -132,6 +134,40 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 label: 'Send Reset Link',
                 onPressed: _send,
                 isLoading: _isLoading,
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Text(
+                  '— OR —',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textTertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: const Icon(Icons.support_agent_rounded,
+                    color: AppColors.primary, size: 20),
+                label: const Text(
+                  'Contact Support for Temporary Password',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onPressed: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('current_guest_session_id');
+                  if (context.mounted) context.push(AppRoutes.support);
+                },
               ),
             ],
           ),

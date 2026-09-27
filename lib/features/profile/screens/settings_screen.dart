@@ -5,6 +5,8 @@ import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/models/settings_models.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
+import 'package:go_router/go_router.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -14,10 +16,20 @@ class SettingsScreen extends ConsumerWidget {
     final prefsAsync = ref.watch(notifPrefsProvider);
     final currentUserId = ref.watch(currentUserIdProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Settings'),
-      body: prefsAsync.when(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.profile);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Settings', fallbackRoute: AppRoutes.profile),
+        body: prefsAsync.when(
         data: (prefs) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -133,7 +145,7 @@ class SettingsScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(notifPrefsProvider),
         ),
       ),
-    );
+    ));
   }
 
   void _update(

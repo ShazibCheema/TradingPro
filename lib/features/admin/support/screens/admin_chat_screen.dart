@@ -1,5 +1,8 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:tradingpro/providers/app_providers.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
@@ -19,6 +22,8 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  Uint8List? _attachedBytes;
+  String? _attachedFileName;
 
   @override
   void initState() {
@@ -48,15 +53,102 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
     }
   }
 
+  Future<void> _pickAttachment(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _attachedBytes = bytes;
+          _attachedFileName = picked.name;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not attach image: $e'),
+            backgroundColor: AppColors.negative,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showAttachmentPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Attach File or Image', style: AppTextStyles.h4),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined,
+                    color: AppColors.primary),
+                title: const Text('Take a Photo'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickAttachment(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined,
+                    color: AppColors.primary),
+                title: const Text('Choose from Gallery / Files'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickAttachment(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendAdminMessage() async {
     final text = _textController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _attachedBytes == null) return;
+
+    final bytesToSend = _attachedBytes;
+    final fileNameToSend = _attachedFileName;
 
     _textController.clear();
-    setState(() => _isSending = true);
+    setState(() {
+      _isSending = true;
+      _attachedBytes = null;
+      _attachedFileName = null;
+    });
 
     try {
       final currentUserId = ref.read(currentUserIdProvider) ?? 'admin';
+      String? attachmentUrl;
+
+      if (bytesToSend != null) {
+        attachmentUrl = await ref
+            .read(supportRepositoryProvider)
+            .uploadSupportAttachment(
+              conversationId: widget.conversation.conversationId,
+              bytes: bytesToSend,
+              fileName: fileNameToSend ?? 'admin_attachment.jpg',
+            );
+      }
+
       await ref.read(supportRepositoryProvider).sendMessage(
             conversationId: widget.conversation.conversationId,
             senderId: currentUserId,
@@ -64,6 +156,8 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
             senderName: 'Support Representative',
             content: text,
             userId: widget.conversation.userId,
+            attachmentUrl: attachmentUrl,
+            messageType: attachmentUrl != null ? 'image' : 'text',
           );
       _scrollToBottom();
     } catch (e) {
@@ -112,6 +206,102 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+  }
+
+  void _showImageViewer(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 650, maxHeight: 750),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppBar(
+                title: const Text('Attachment Preview'),
+                automaticallyImplyLeading: false,
+                actions: [
+                  IconButton(
+                    tooltip: 'Open full size in browser',
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    onPressed: () async {
+                      final uri = Uri.parse(imageUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri,
+                            mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              Flexible(
+                child: Container(
+                  color: Colors.black12,
+                  alignment: Alignment.center,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (_, child, progress) => progress == null
+                        ? child
+                        : const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(40),
+                              child: CircularProgressIndicator(),
+                            ),
+                          ),
+                    errorBuilder: (_, error, stackTrace) => Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.broken_image_rounded,
+                              size: 48, color: AppColors.negative),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Failed to load image directly.',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                            label: const Text('Open Attachment in Browser'),
+                            onPressed: () async {
+                              final uri = Uri.parse(imageUrl);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri,
+                                    mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Done'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -169,6 +359,7 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
                     final msg = messages[index];
                     final isAdmin = msg.isAdmin;
                     final isSystem = msg.isSystem;
+                    final hasAttachment = msg.hasAttachment;
 
                     if (isSystem) {
                       return Padding(
@@ -215,7 +406,7 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
                           ],
                           Flexible(
                             child: Container(
-                              padding: const EdgeInsets.all(14),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isAdmin
                                     ? AppColors.primary
@@ -236,14 +427,119 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
                                     ? CrossAxisAlignment.end
                                     : CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    msg.content,
-                                    style: AppTextStyles.body.copyWith(
-                                      color: isAdmin
-                                          ? Colors.white
-                                          : AppColors.textPrimary,
+                                  if (hasAttachment) ...[
+                                    GestureDetector(
+                                      onTap: () => _showImageViewer(
+                                          context, msg.attachmentUrl!),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            maxHeight: 240,
+                                            maxWidth: 280,
+                                          ),
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Image.network(
+                                                msg.attachmentUrl!,
+                                                fit: BoxFit.cover,
+                                                loadingBuilder:
+                                                    (_, child, progress) =>
+                                                        progress == null
+                                                            ? child
+                                                            : Container(
+                                                                height: 140,
+                                                                width: 200,
+                                                                color: isAdmin
+                                                                    ? Colors
+                                                                        .white12
+                                                                    : AppColors
+                                                                        .surfaceVariant,
+                                                                child:
+                                                                    const Center(
+                                                                  child:
+                                                                      CircularProgressIndicator(
+                                                                    strokeWidth:
+                                                                        2,
+                                                                    color: AppColors
+                                                                        .primary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                errorBuilder: (_, __, ___) =>
+                                                    Container(
+                                                  padding:
+                                                      const EdgeInsets.all(12),
+                                                  color: isAdmin
+                                                      ? Colors.white12
+                                                      : AppColors
+                                                          .surfaceVariant,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                          Icons.image_outlined,
+                                                          color: isAdmin
+                                                              ? Colors.white
+                                                              : AppColors
+                                                                  .textPrimary,
+                                                          size: 20),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        'View Attachment',
+                                                        style: TextStyle(
+                                                          color: isAdmin
+                                                              ? Colors.white
+                                                              : AppColors
+                                                                  .textPrimary,
+                                                          fontSize: 12,
+                                                          decoration:
+                                                              TextDecoration
+                                                                  .underline,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                right: 6,
+                                                bottom: 6,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black54,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            6),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.fullscreen_rounded,
+                                                    color: Colors.white,
+                                                    size: 16,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    if (msg.content.isNotEmpty)
+                                      const SizedBox(height: 8),
+                                  ],
+                                  if (msg.content.isNotEmpty)
+                                    Text(
+                                      msg.content,
+                                      style: AppTextStyles.body.copyWith(
+                                        color: isAdmin
+                                            ? Colors.white
+                                            : AppColors.textPrimary,
+                                      ),
+                                    ),
                                   const SizedBox(height: 4),
                                   Text(
                                     AppFormatters.dateTime(msg.createdAt),
@@ -273,10 +569,64 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
             ),
           ),
 
+          // Attached File Preview Banner
+          if (_attachedBytes != null)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant,
+                border: const Border(
+                  top: BorderSide(color: AppColors.divider, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.memory(
+                      _attachedBytes!,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'File ready to send',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          _attachedFileName ?? 'Image preview',
+                          style: AppTextStyles.caption,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        color: AppColors.negative, size: 20),
+                    onPressed: () => setState(() {
+                      _attachedBytes = null;
+                      _attachedFileName = null;
+                    }),
+                  ),
+                ],
+              ),
+            ),
+
           // Message Input
           SafeArea(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: const BoxDecoration(
                 color: AppColors.surface,
                 border: Border(
@@ -285,31 +635,52 @@ class _AdminChatScreenState extends ConsumerState<AdminChatScreen> {
               ),
               child: Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.attach_file_rounded,
+                        color: AppColors.primary),
+                    tooltip: 'Attach photo or file',
+                    onPressed: _showAttachmentPicker,
+                  ),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
                       controller: _textController,
-                      decoration: const InputDecoration(
-                        hintText: 'Type administrative reply...',
+                      decoration: InputDecoration(
+                        hintText: _attachedBytes != null
+                            ? 'Add a caption (optional)...'
+                            : 'Type administrative reply...',
+                        filled: true,
+                        fillColor: AppColors.surfaceVariant,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                       onSubmitted: (_) => _sendAdminMessage(),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(60, 48),
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
                     ),
-                    onPressed: _isSending ? null : _sendAdminMessage,
-                    child: _isSending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.send_rounded, size: 20),
+                    child: IconButton(
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded,
+                              color: Colors.white, size: 20),
+                      onPressed: _isSending ? null : _sendAdminMessage,
+                    ),
                   ),
                 ],
               ),

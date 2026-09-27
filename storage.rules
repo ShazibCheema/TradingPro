@@ -15,17 +15,28 @@ service firebase.storage {
         (request.auth.token.role == 'admin' || request.auth.token.role == 'superAdmin');
     }
 
-    // Deposit Screenshots — private to submitting user and admin
+    // Deposit Screenshots — accessible by submitting user and admins
     match /deposit-screenshots/{userId}/{allPaths=**} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isAuthenticated();
       allow write: if isOwner(userId) 
-        && request.resource.size < 10 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.size < 20 * 1024 * 1024;
     }
 
-    // Public Coin Logos
+    // Support Chat Attachments — accessible by authenticated users and guests
+    match /support-attachments/{conversationId}/{allPaths=**} {
+      allow read, write: if true
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // Coin Logos
     match /coin-logos/{allPaths=**} {
-      allow read: if isAuthenticated();
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Deposit Method QR Codes
+    match /qr-codes/{allPaths=**} {
+      allow read: if true;
       allow write: if isAdmin();
     }
   }

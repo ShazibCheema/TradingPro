@@ -12,6 +12,8 @@ class UserModel {
   final String? role;
   final double balance;
   final double profit;
+  final bool mustChangePassword;
+  final bool isTemporaryPassword;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -25,6 +27,8 @@ class UserModel {
     this.role,
     required this.balance,
     required this.profit,
+    this.mustChangePassword = false,
+    this.isTemporaryPassword = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -48,6 +52,10 @@ class UserModel {
       role: data['role'] as String?,
       balance: (data['balance'] as num? ?? 0).toDouble(),
       profit: (data['profit'] as num? ?? 0).toDouble(),
+      mustChangePassword: data['mustChangePassword'] as bool? ??
+          data['isTemporaryPassword'] as bool? ??
+          false,
+      isTemporaryPassword: data['isTemporaryPassword'] as bool? ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -62,6 +70,8 @@ class UserModel {
       'accountStatus': accountStatus.name,
       'balance': balance,
       'profit': profit,
+      'mustChangePassword': mustChangePassword,
+      'isTemporaryPassword': isTemporaryPassword,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -73,6 +83,8 @@ class UserModel {
     AccountStatus? accountStatus,
     double? balance,
     double? profit,
+    bool? mustChangePassword,
+    bool? isTemporaryPassword,
   }) {
     return UserModel(
       uid: uid,
@@ -83,6 +95,8 @@ class UserModel {
       accountStatus: accountStatus ?? this.accountStatus,
       balance: balance ?? this.balance,
       profit: profit ?? this.profit,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      isTemporaryPassword: isTemporaryPassword ?? this.isTemporaryPassword,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

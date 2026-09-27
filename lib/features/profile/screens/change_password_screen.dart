@@ -6,6 +6,7 @@ import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_validators.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -66,10 +67,20 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Change Password'),
-      body: SingleChildScrollView(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.profile);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Change Password', fallbackRoute: AppRoutes.profile),
+        body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Form(
           key: _formKey,
@@ -175,6 +186,6 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 }

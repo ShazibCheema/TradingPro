@@ -200,7 +200,7 @@ class ProfileScreen extends ConsumerWidget {
                     _ProfileItem(
                       icon: Icons.info_outline_rounded,
                       title: 'About TradingPro',
-                      subtitle: 'Version 1.0.0 (I&T)',
+                      subtitle: 'Version 1.0.1 (I&T)',
                       onTap: () => _showAboutDialog(context),
                     ),
                   ],
@@ -375,7 +375,7 @@ class ProfileScreen extends ConsumerWidget {
               style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 12),
-            Text('Version: 1.0.0 (Production Build)',
+            Text('Version: 1.0.1 (Production Build)',
                 style: AppTextStyles.caption),
           ],
         ),

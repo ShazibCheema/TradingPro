@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -47,19 +47,26 @@ class DepositRepository {
             snap.docs.map(DepositMethodModel.fromFirestore).toList());
   }
 
-  /// Upload deposit screenshot securely to Firebase Storage
-  Future<String> uploadScreenshot(String uid, File imageFile) async {
-    final fileExt = imageFile.path.split('.').last;
-    final fileName = '${const Uuid().v4()}.$fileExt';
+  /// Upload deposit screenshot securely to Firebase Storage (cross-platform web/mobile)
+  Future<String> uploadScreenshot(String uid, Uint8List bytes, {String fileExt = 'jpg'}) async {
+    final cleanExt = fileExt.replaceAll('.', '').toLowerCase();
+    final fileName = '${const Uuid().v4()}.$cleanExt';
+    String contentType = 'image/jpeg';
+    if (cleanExt == 'png') {
+      contentType = 'image/png';
+    } else if (cleanExt == 'webp') {
+      contentType = 'image/webp';
+    }
+
     final storageRef = _storage
         .ref()
         .child('deposit-screenshots')
         .child(uid)
         .child(fileName);
 
-    final uploadTask = await storageRef.putFile(
-      imageFile,
-      SettableMetadata(contentType: 'image/$fileExt'),
+    final uploadTask = await storageRef.putData(
+      bytes,
+      SettableMetadata(contentType: contentType),
     );
     return await uploadTask.ref.getDownloadURL();
   }

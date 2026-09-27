@@ -20,6 +20,8 @@ import 'package:tradingpro/models/trade_model.dart';
 import 'package:tradingpro/models/notification_model.dart';
 import 'package:tradingpro/models/transaction_model.dart';
 import 'package:tradingpro/models/settings_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'package:tradingpro/models/support_models.dart';
 import 'package:tradingpro/models/audit_log_model.dart';
 import 'package:tradingpro/models/admin_notification_model.dart';
@@ -190,22 +192,34 @@ final appSettingsProvider = StreamProvider<AppSettingsModel>((ref) {
 final userConversationProvider =
     StreamProvider<SupportConversationModel?>((ref) async* {
   final user = ref.watch(userProvider).valueOrNull;
-  if (user == null) {
-    yield null;
-    return;
-  }
   final repo = ref.watch(supportRepositoryProvider);
+
   try {
-    final conv = await repo.getOrCreateConversation(
-      user.uid,
-      user.userId7,
-      user.fullName,
-      user.email,
-    );
-    yield* repo.streamConversation(conv.conversationId);
+    if (user != null) {
+      final conv = await repo.getOrCreateConversation(
+        user.uid,
+        user.userId7,
+        user.fullName,
+        user.email,
+      );
+      yield* repo.streamConversation(conv.conversationId);
+    } else {
+      // Guest user (e.g. from Forgot Password / Account Recovery)
+      final prefs = await SharedPreferences.getInstance();
+      String? guestId = prefs.getString('current_guest_session_id');
+      if (guestId == null) {
+        guestId = 'guest_${const Uuid().v4().substring(0, 8)}';
+        await prefs.setString('current_guest_session_id', guestId);
+      }
+      final conv = await repo.getOrCreateConversation(
+        guestId,
+        'GUEST',
+        'Guest User (Account Recovery)',
+        prefs.getString('guest_support_email') ?? 'guest@tradingpro.user',
+      );
+      yield* repo.streamConversation(conv.conversationId);
+    }
   } catch (e) {
-    // If it fails (e.g. index building), don't yield anything or yield error
-    // StreamProvider will handle the throw and show ErrorStateWidget
     rethrow;
   }
 });

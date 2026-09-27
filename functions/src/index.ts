@@ -1076,3 +1076,262 @@ export const deleteUserAccount = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError("internal", error.message || "Failed to delete account");
   }
 });
+
+// ─── 17. Fetch Binance Market Prices (Scheduled every 1 minute) ───────────────
+//
+// This function:
+//   1. Reads all active coins from Firestore that have marketDataMode = "live"
+//   2. Calls Binance REST API to get current ticker prices
+//   3. Updates each coin document with latestPrice, priceChangePercent24h,
+//      high24h, low24h, volume24h, and sets marketDataStatus = "online"
+//   4. If a coin symbol is not found on Binance, it marks it "offline"
+
+async function fetchBinancePrices(symbols: string[]): Promise<Map<string, {
+  price: number;
+  priceChangePercent: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  quoteVolume24h: number;
+}>> {
+  const result = new Map();
+
+  if (symbols.length === 0) return result;
+
+  try {
+    // Binance REST API: Get 24hr ticker for multiple symbols at once
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=[${symbols.map(s => `"${s}"`).join(",")}]`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      console.error(`Binance API error: ${response.status} ${response.statusText}`);
+      // Try one by one as fallback
+      for (const sym of symbols) {
+        try {
+          const singleUrl = `https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}`;
+          const singleResp = await fetch(singleUrl);
+          if (singleResp.ok) {
+            const ticker: any = await singleResp.json();
+            result.set(sym, {
+              price: parseFloat(ticker.lastPrice || "0"),
+              priceChangePercent: parseFloat(ticker.priceChangePercent || "0"),
+              high24h: parseFloat(ticker.highPrice || "0"),
+              low24h: parseFloat(ticker.lowPrice || "0"),
+              volume24h: parseFloat(ticker.volume || "0"),
+              quoteVolume24h: parseFloat(ticker.quoteVolume || "0"),
+            });
+          }
+        } catch (e) {
+          console.error(`Failed to fetch price for ${sym}:`, e);
+        }
+      }
+      return result;
+    }
+
+    const tickers: any[] = await response.json();
+    for (const ticker of tickers) {
+      result.set(ticker.symbol, {
+        price: parseFloat(ticker.lastPrice || "0"),
+        priceChangePercent: parseFloat(ticker.priceChangePercent || "0"),
+        high24h: parseFloat(ticker.highPrice || "0"),
+        low24h: parseFloat(ticker.lowPrice || "0"),
+        volume24h: parseFloat(ticker.volume || "0"),
+        quoteVolume24h: parseFloat(ticker.quoteVolume || "0"),
+      });
+    }
+  } catch (error) {
+    console.error("Failed to fetch Binance prices:", error);
+  }
+
+  return result;
+}
+
+async function runMarketPriceFetch(): Promise<{ updated: number; failed: number }> {
+  // 1. Get all active live-mode coins
+  const coinsSnap = await db.collection("coins")
+    .where("isActive", "==", true)
+    .where("marketDataMode", "==", "live")
+    .get();
+
+  if (coinsSnap.empty) {
+    console.log("No active live-mode coins found.");
+    return { updated: 0, failed: 0 };
+  }
+
+  // 2. Collect unique binance symbols
+  const coinDocs = coinsSnap.docs.map(doc => ({
+    id: doc.id,
+    data: doc.data(),
+    binanceSymbol: (doc.data().binanceSymbol || doc.data().symbol || "").toUpperCase().trim(),
+  })).filter(c => c.binanceSymbol.length > 0);
+
+  const uniqueSymbols = [...new Set(coinDocs.map(c => c.binanceSymbol))];
+  console.log(`Fetching prices for ${uniqueSymbols.length} symbol(s): ${uniqueSymbols.join(", ")}`);
+
+  // 3. Fetch from Binance
+  const priceMap = await fetchBinancePrices(uniqueSymbols);
+
+  // 4. Update Firestore
+  const batch = db.batch();
+  let updated = 0;
+  let failed = 0;
+
+  for (const coin of coinDocs) {
+    const ticker = priceMap.get(coin.binanceSymbol);
+    const ref = db.collection("coins").doc(coin.id);
+
+    if (ticker && ticker.price > 0) {
+      batch.update(ref, {
+        latestPrice: ticker.price,
+        priceChangePercent24h: ticker.priceChangePercent,
+        high24h: ticker.high24h,
+        low24h: ticker.low24h,
+        volume24h: ticker.volume24h,
+        quoteVolume24h: ticker.quoteVolume24h,
+        marketDataStatus: "online",
+        lastPriceFetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      updated++;
+      console.log(`✅ ${coin.binanceSymbol}: $${ticker.price} (${ticker.priceChangePercent >= 0 ? "+" : ""}${ticker.priceChangePercent.toFixed(2)}%)`);
+    } else {
+      // Symbol not found on Binance or price is 0
+      batch.update(ref, {
+        marketDataStatus: "offline",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      failed++;
+      console.warn(`⚠️  ${coin.binanceSymbol}: not found on Binance or price is 0`);
+    }
+  }
+
+  await batch.commit();
+  console.log(`Market price update complete. Updated: ${updated}, Failed: ${failed}`);
+  return { updated, failed };
+}
+
+// Scheduled: runs every minute automatically
+export const fetchMarketPrices = functions.pubsub
+  .schedule("every 1 minutes")
+  .onRun(async (_context) => {
+    console.log("⏰ fetchMarketPrices scheduled run started...");
+    try {
+      const result = await runMarketPriceFetch();
+      console.log(`fetchMarketPrices done: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.error("fetchMarketPrices FAILED:", error);
+    }
+    return null;
+  });
+
+// On-demand: admin can trigger manually for testing
+export const fetchMarketPricesNow = functions.https.onCall(async (_data, context) => {
+  verifyAdmin(context);
+  try {
+    const result = await runMarketPriceFetch();
+    return { success: true, ...result };
+  } catch (error: any) {
+    throw new functions.https.HttpsError("internal", error.message || "Price fetch failed");
+  }
+});
+
+// ─── Set Temporary Password (Admin Only) ───────────────────────────────────────
+// Admin sets a temporary password for a user who has lost access to their account.
+// The user will be forced to change this password upon next login.
+export const setTemporaryPassword = functions.https.onCall(async (data, context) => {
+  const adminUid = verifyAdmin(context);
+  const { userId, temporaryPassword } = data;
+
+  if (!userId || typeof userId !== "string") {
+    throw new functions.https.HttpsError("invalid-argument", "A valid userId is required.");
+  }
+  if (!temporaryPassword || typeof temporaryPassword !== "string" || temporaryPassword.length < 6) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Temporary password must be at least 6 characters."
+    );
+  }
+
+  // Verify the target user exists in Firestore
+  const userDoc = await db.collection("users").doc(userId).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError("not-found", "User not found.");
+  }
+
+  try {
+    // Update the user's Firebase Auth password
+    await admin.auth().updateUser(userId, { password: temporaryPassword });
+
+    // Set flags in Firestore so the client forces a password change
+    await db.collection("users").doc(userId).update({
+      mustChangePassword: true,
+      isTemporaryPassword: true,
+      temporaryPasswordSetAt: admin.firestore.FieldValue.serverTimestamp(),
+      temporaryPasswordSetBy: adminUid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Log the action in the audit trail
+    await db.collection("auditLogs").add({
+      action: "setTemporaryPassword",
+      targetType: "user",
+      targetId: userId,
+      performedBy: adminUid,
+      details: {
+        userEmail: userDoc.data()?.email || "unknown",
+        userName: userDoc.data()?.fullName || "unknown",
+        userId7: userDoc.data()?.userId7 || "unknown",
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(`✅ Admin ${adminUid} set temporary password for user ${userId}`);
+    return { success: true, message: "Temporary password set successfully." };
+  } catch (error: any) {
+    console.error(`❌ Failed to set temporary password for ${userId}:`, error);
+    throw new functions.https.HttpsError(
+      "internal",
+      error.message || "Failed to set temporary password."
+    );
+  }
+});
+
+// ─── Auto Delete Guest Support Chats (> 48 Hours) ─────────────────────────────
+// Automatically cleans up guest support conversations and messages older than 48 hours
+export const autoDeleteGuestSupportChats = functions.pubsub
+  .schedule("every 1 hours")
+  .onRun(async (_context) => {
+    console.log("⏰ autoDeleteGuestSupportChats scheduled run started...");
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    try {
+      const snap = await db
+        .collection("supportConversations")
+        .where("isGuest", "==", true)
+        .where("createdAt", "<=", fortyEightHoursAgo)
+        .get();
+
+      if (snap.empty) {
+        console.log("No expired guest support chats found.");
+        return null;
+      }
+
+      let deletedCount = 0;
+      for (const doc of snap.docs) {
+        const messagesSnap = await doc.ref.collection("messages").get();
+        const batch = db.batch();
+        messagesSnap.docs.forEach((msgDoc) => batch.delete(msgDoc.ref));
+        batch.delete(doc.ref);
+        await batch.commit();
+        deletedCount++;
+      }
+
+      console.log(`✅ Deleted ${deletedCount} guest support chats older than 48 hours.`);
+    } catch (error) {
+      console.error("autoDeleteGuestSupportChats FAILED:", error);
+    }
+    return null;
+  });

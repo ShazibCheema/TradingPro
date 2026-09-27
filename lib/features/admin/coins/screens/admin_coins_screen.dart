@@ -10,6 +10,7 @@ import 'package:tradingpro/core/utils/app_formatters.dart';
 import 'package:tradingpro/models/coin_model.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
 import 'package:tradingpro/shared_widgets/market_data_widgets.dart';
+import 'package:tradingpro/shared_widgets/coin_logo_widget.dart';
 
 class AdminCoinsScreen extends ConsumerStatefulWidget {
   const AdminCoinsScreen({super.key});
@@ -736,43 +737,10 @@ class _AdminCoinCard extends StatelessWidget {
       child: Row(
         children: [
           // Logo
-          Container(
-            width: 44,
-            height: 44,
-            decoration: const BoxDecoration(
-              color: AppColors.gray100,
-              shape: BoxShape.circle,
-            ),
-            child: ClipOval(
-              child: (coin.logoUrl != null && coin.logoUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: coin.logoUrl!,
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => const Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      errorWidget: (_, __, ___) => Center(
-                        child: Text(
-                          coin.symbol.isNotEmpty
-                              ? coin.symbol[0].toUpperCase()
-                              : '?',
-                          style: AppTextStyles.h4
-                              .copyWith(color: AppColors.primary),
-                        ),
-                      ),
-                    )
-                  : Center(
-                      child: Text(
-                        coin.symbol.isNotEmpty
-                            ? coin.symbol[0].toUpperCase()
-                            : '?',
-                        style:
-                            AppTextStyles.h4.copyWith(color: AppColors.primary),
-                      ),
-                    ),
-            ),
+          CoinLogoWidget(
+            logoUrl: coin.logoUrl,
+            symbol: coin.symbol,
+            size: 44,
           ),
           const SizedBox(width: 14),
 

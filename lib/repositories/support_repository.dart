@@ -1,9 +1,13 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
 import 'package:tradingpro/models/support_models.dart';
 import 'package:tradingpro/core/constants/app_constants.dart';
 
 class SupportRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   CollectionReference get _conversations =>
       _db.collection(AppConstants.supportConversationsCollection);
@@ -49,6 +53,7 @@ class SupportRepository {
       'userId7': userId7,
       'userFullName': userFullName,
       'userEmail': userEmail,
+      'isGuest': uid.startsWith('guest_'),
       'status': 'open',
       'lastMessage': null,
       'lastMessageAt': null,
@@ -80,7 +85,39 @@ class SupportRepository {
             snap.docs.map(SupportMessageModel.fromFirestore).toList());
   }
 
-  /// Send a message
+  /// Upload support attachment securely to Firebase Storage (cross-platform web/mobile)
+  Future<String> uploadSupportAttachment({
+    required String conversationId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final cleanExt = fileName.split('.').last.replaceAll('.', '').toLowerCase();
+    final uniqueName = '${const Uuid().v4()}.$cleanExt';
+    String contentType = 'image/jpeg';
+    if (cleanExt == 'png') {
+      contentType = 'image/png';
+    } else if (cleanExt == 'webp') {
+      contentType = 'image/webp';
+    } else if (cleanExt == 'gif') {
+      contentType = 'image/gif';
+    } else if (cleanExt == 'pdf') {
+      contentType = 'application/pdf';
+    }
+
+    final storageRef = _storage
+        .ref()
+        .child('support-attachments')
+        .child(conversationId)
+        .child(uniqueName);
+
+    final uploadTask = await storageRef.putData(
+      bytes,
+      SettableMetadata(contentType: contentType),
+    );
+    return await uploadTask.ref.getDownloadURL();
+  }
+
+  /// Send a message (text or attachment)
   Future<void> sendMessage({
     required String conversationId,
     required String senderId,
@@ -88,24 +125,37 @@ class SupportRepository {
     required String senderName,
     required String content,
     required String userId,
+    String? attachmentUrl,
+    String? messageType,
   }) async {
     final batch = _db.batch();
 
     // Add message
     final msgRef = _messages(conversationId).doc();
-    batch.set(msgRef, {
+    final hasAttachment = attachmentUrl != null && attachmentUrl.isNotEmpty;
+    final finalType = messageType ?? (hasAttachment ? 'image' : 'text');
+    final msgData = <String, dynamic>{
       'conversationId': conversationId,
       'senderId': senderId,
       'senderRole': senderRole.name,
       'senderName': senderName,
       'content': content.trim(),
+      'messageType': finalType,
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    };
+    if (hasAttachment) {
+      msgData['attachmentUrl'] = attachmentUrl;
+    }
+    batch.set(msgRef, msgData);
 
     // Update conversation metadata
+    final previewText = hasAttachment
+        ? (content.trim().isNotEmpty ? content.trim() : '📷 Image attachment')
+        : (content.trim().isNotEmpty ? content.trim() : 'New message');
+
     final convRef = _conversations.doc(conversationId);
     final updates = <String, dynamic>{
-      'lastMessage': content.trim(),
+      'lastMessage': previewText,
       'lastMessageAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'status': 'open', // Reopen if closed when user sends

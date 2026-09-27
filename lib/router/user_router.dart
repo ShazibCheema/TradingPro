@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tradingpro/providers/app_providers.dart';
 import 'package:tradingpro/features/auth/screens/login_screen.dart';
 import 'package:tradingpro/features/auth/screens/register_screen.dart';
-import 'package:tradingpro/features/auth/screens/forgot_password_screen.dart';
 import 'package:tradingpro/features/home/screens/home_screen.dart';
 import 'package:tradingpro/features/account/screens/account_screen.dart';
 import 'package:tradingpro/features/inbox/screens/inbox_screen.dart';
@@ -23,7 +22,6 @@ import 'package:tradingpro/shared_widgets/user_shell.dart';
 class AppRoutes {
   static const login = '/login';
   static const register = '/register';
-  static const forgotPassword = '/forgot-password';
   static const home = '/home';
   static const account = '/account';
   static const inbox = '/inbox';
@@ -45,12 +43,16 @@ final userRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.home,
     redirect: (context, state) {
       final isLoggedIn = authState.valueOrNull != null;
-      final isAuthRoute = state.matchedLocation == AppRoutes.login ||
-          state.matchedLocation == AppRoutes.register ||
-          state.matchedLocation == AppRoutes.forgotPassword;
+      final isPublicAuthRoute = state.matchedLocation == AppRoutes.login ||
+          state.matchedLocation == AppRoutes.register;
+      final isSupportRoute = state.matchedLocation == AppRoutes.support;
 
-      if (!isLoggedIn && !isAuthRoute) return AppRoutes.login;
-      if (isLoggedIn && isAuthRoute) return AppRoutes.home;
+      if (!isLoggedIn && !isPublicAuthRoute && !isSupportRoute) {
+        return AppRoutes.login;
+      }
+      if (isLoggedIn && isPublicAuthRoute) {
+        return AppRoutes.home;
+      }
       return null;
     },
     routes: [
@@ -69,14 +71,6 @@ final userRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _slideTransition(
           state,
           const RegisterScreen(),
-        ),
-      ),
-      GoRoute(
-        path: AppRoutes.forgotPassword,
-        name: 'forgotPassword',
-        pageBuilder: (context, state) => _slideTransition(
-          state,
-          const ForgotPasswordScreen(),
         ),
       ),
 

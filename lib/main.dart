@@ -22,7 +22,10 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    await AppCheckService.initialize();
+    // Initialize AppCheck asynchronously so it doesn't block UI first frame
+    AppCheckService.initialize().catchError((e) {
+      debugPrint('[AppCheck] Background init notice: $e');
+    });
 
     debugPrint('✅ [Firebase User] Initialized successfully for ${kIsWeb ? "Web" : defaultTargetPlatform.name}');
     isInitialized = true;

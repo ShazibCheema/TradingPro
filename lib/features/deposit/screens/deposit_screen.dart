@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,8 @@ import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_validators.dart';
 import 'package:tradingpro/models/settings_models.dart';
 import 'package:tradingpro/shared_widgets/app_widgets.dart';
+import 'package:tradingpro/router/user_router.dart';
+import 'package:go_router/go_router.dart';
 
 class DepositScreen extends ConsumerStatefulWidget {
   const DepositScreen({super.key});
@@ -22,7 +23,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   DepositMethodModel? _selectedMethod;
-  File? _screenshotFile;
+  Uint8List? _screenshotBytes;
+  String? _screenshotName;
   bool _isUploading = false;
   bool _isSubmitted = false;
   String? _error;
@@ -43,8 +45,10 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         imageQuality: 85,
       );
       if (picked != null) {
+        final bytes = await picked.readAsBytes();
         setState(() {
-          _screenshotFile = File(picked.path);
+          _screenshotBytes = bytes;
+          _screenshotName = picked.name;
           _error = null;
         });
       }
@@ -99,7 +103,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       return;
     }
     if (!_formKey.currentState!.validate()) return;
-    if (_screenshotFile == null) {
+    if (_screenshotBytes == null) {
       setState(() => _error = 'Payment screenshot proof is required.');
       return;
     }
@@ -127,9 +131,11 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       final depositRepo = ref.read(depositRepositoryProvider);
 
       // Upload screenshot to secure Storage
+      final ext = _screenshotName?.split('.').last ?? 'jpg';
       final screenshotUrl = await depositRepo.uploadScreenshot(
         user.uid,
-        _screenshotFile!,
+        _screenshotBytes!,
+        fileExt: ext,
       );
 
       final amount = double.parse(_amountCtrl.text.replaceAll(',', ''));
@@ -165,10 +171,20 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
 
     final methodsAsync = ref.watch(activeDepositMethodsProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const TradingProAppBar(title: 'Deposit Funds'),
-      body: methodsAsync.when(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.home);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: const TradingProAppBar(title: 'Deposit Funds', fallbackRoute: AppRoutes.home),
+        body: methodsAsync.when(
         data: (methods) {
           if (methods.isEmpty) {
             return const EmptyStateWidget(
@@ -249,7 +265,14 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                               data: _selectedMethod!.walletAddress,
                               version: QrVersions.auto,
                               size: 160,
-                              foregroundColor: AppColors.textPrimary,
+                              eyeStyle: const QrEyeStyle(
+                                eyeShape: QrEyeShape.square,
+                                color: AppColors.textPrimary,
+                              ),
+                              dataModuleStyle: const QrDataModuleStyle(
+                                dataModuleShape: QrDataModuleShape.square,
+                                color: AppColors.textPrimary,
+                              ),
                             ),
                           ),
                         const SizedBox(height: 16),
@@ -335,7 +358,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                   // ─── Step 5: Upload Screenshot ────────────────────────────
                   Text('4. Upload Payment Proof', style: AppTextStyles.h4),
                   const SizedBox(height: 10),
-                  if (_screenshotFile == null)
+                  if (_screenshotBytes == null)
                     GestureDetector(
                       onTap: _showImageSourcePicker,
                       child: Container(
@@ -385,8 +408,8 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              _screenshotFile!,
+                            child: Image.memory(
+                              _screenshotBytes!,
                               width: 70,
                               height: 70,
                               fit: BoxFit.cover,
@@ -405,17 +428,29 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Tap replace to choose a different file',
+                                  _screenshotName ?? 'Tap replace to choose a different file',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.caption,
                                 ),
                               ],
                             ),
                           ),
                           IconButton(
+                            icon: const Icon(Icons.refresh_rounded,
+                                color: AppColors.primary),
+                            tooltip: 'Replace',
+                            onPressed: _showImageSourcePicker,
+                          ),
+                          IconButton(
                             icon: const Icon(Icons.delete_outline_rounded,
                                 color: AppColors.negative),
+                            tooltip: 'Remove',
                             onPressed: () =>
-                                setState(() => _screenshotFile = null),
+                                setState(() {
+                                  _screenshotBytes = null;
+                                  _screenshotName = null;
+                                }),
                           ),
                         ],
                       ),
@@ -462,7 +497,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
           onRetry: () => ref.invalidate(activeDepositMethodsProvider),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildSubmittedSuccess() {
@@ -508,7 +543,13 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
               const SizedBox(height: 36),
               PrimaryButton(
                 label: 'Back to Home',
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go(AppRoutes.home);
+                  }
+                },
                 width: 200,
               ),
             ],

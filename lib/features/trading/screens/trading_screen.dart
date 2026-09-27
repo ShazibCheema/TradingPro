@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tradingpro/providers/app_providers.dart';
+import 'package:tradingpro/router/user_router.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
 import 'package:tradingpro/core/utils/app_formatters.dart';
@@ -91,6 +93,14 @@ class _TradingScreenState extends ConsumerState<TradingScreen>
     }
   }
 
+  void _handleBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userAsync = ref.watch(userProvider);
@@ -98,22 +108,33 @@ class _TradingScreenState extends ConsumerState<TradingScreen>
 
     final availableBalance = userAsync.valueOrNull?.balance ?? 0.0;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Trading Account'),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          tabs: const [
-            Tab(text: 'New Trade'),
-            Tab(text: 'My Positions'),
-          ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _handleBack();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Trading Account'),
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            onPressed: _handleBack,
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          ),
+          bottom: TabBar(
+            controller: _tabController,
+            labelColor: AppColors.primary,
+            unselectedLabelColor: AppColors.textSecondary,
+            indicatorColor: AppColors.primary,
+            indicatorWeight: 3,
+            tabs: const [
+              Tab(text: 'New Trade'),
+              Tab(text: 'My Positions'),
+            ],
+          ),
         ),
-      ),
       body: TabBarView(
         controller: _tabController,
         children: [
@@ -233,7 +254,7 @@ class _TradingScreenState extends ConsumerState<TradingScreen>
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
