@@ -55,6 +55,9 @@ key.proprities
 local.properties
 .env
 service-account*.json
+serviceAccountKey.json
+scripts/serviceAccountKey.json
+scripts/node_modules/
 
 # Node modules
 functions/node_modules/
