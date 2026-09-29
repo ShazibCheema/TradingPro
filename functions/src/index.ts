@@ -120,11 +120,45 @@ export const createUserProfile = functions.https.onCall(async (data, context) =>
   const uid = verifyAuth(context);
   const fullName = (data.fullName || "").trim();
   const email = (data.email || "").trim();
+  const rawInvitedByUserId = (data.invitedByUserId || "").trim();
 
   const userRef = db.collection("users").doc(uid);
   const userSnap = await userRef.get();
   if (userSnap.exists) {
     return { success: true, userId7: userSnap.data()?.userId7 };
+  }
+
+  // ── Validate invitation code server-side ────────────────────────────────
+  let invitedByUserId: string | null = null;
+  if (rawInvitedByUserId) {
+    let inviterUid: string | null = null;
+
+    // Check by doc ID first
+    const inviterDocDirect = await db.collection("users").doc(rawInvitedByUserId).get();
+    if (inviterDocDirect.exists) {
+      inviterUid = inviterDocDirect.id;
+    } else {
+      // Check by 7-digit userId7 (string or number)
+      const intCode = parseInt(rawInvitedByUserId, 10);
+      let inviterQuery = await db.collection("users").where("userId7", "==", rawInvitedByUserId).limit(1).get();
+      if (inviterQuery.empty && !isNaN(intCode)) {
+        inviterQuery = await db.collection("users").where("userId7", "==", intCode).limit(1).get();
+      }
+      if (inviterQuery.empty) {
+        inviterQuery = await db.collection("users").where("referralCode", "==", rawInvitedByUserId).limit(1).get();
+      }
+      if (!inviterQuery.empty) {
+        inviterUid = inviterQuery.docs[0].id;
+      }
+    }
+
+    if (!inviterUid) {
+      throw new functions.https.HttpsError("not-found", "Inviter user not found. Please check the invitation code.");
+    }
+    if (inviterUid === uid) {
+      throw new functions.https.HttpsError("invalid-argument", "Self-referral is not allowed.");
+    }
+    invitedByUserId = inviterUid;
   }
 
   const userId7 = await generateUnique7DigitId();
@@ -139,6 +173,7 @@ export const createUserProfile = functions.https.onCall(async (data, context) =>
     accountStatus: "active",
     balance: 0.0,
     profit: 0.0,
+    ...(invitedByUserId ? { invitedByUserId } : {}),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -154,7 +189,49 @@ export const createUserProfile = functions.https.onCall(async (data, context) =>
   });
 
   await batch.commit();
+
+  // Update public userIndex mapping for fast invitation code lookup
+  try {
+    await db.collection("appSettings").doc("userIndex").set(
+      { [userId7]: uid },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("Failed to update userIndex map:", e);
+  }
+
   return { success: true, userId7 };
+});
+
+// ─── 1b. Validate Invitation Code ───────────────────────────────────────────
+
+export const validateInvitationCode = functions.https.onCall(async (data, _context) => {
+  const code = (data.code || "").trim();
+  if (!code) {
+    return { valid: false, message: "Code cannot be empty." };
+  }
+  if (!/^\d{7}$/.test(code)) {
+    throw new functions.https.HttpsError("invalid-argument", "Invitation code must be a 7-digit numeric ID.");
+  }
+
+  const snap = await db.collection("users").where("userId7", "==", code).limit(1).get();
+  if (snap.empty) {
+    throw new functions.https.HttpsError("not-found", "Invalid invitation code. No user found with this ID.");
+  }
+
+  const inviterDoc = snap.docs[0];
+  const inviterData = inviterDoc.data();
+
+  const currentEmail = (data.email || "").trim().toLowerCase();
+  if (currentEmail && inviterData.email?.toLowerCase() === currentEmail) {
+    throw new functions.https.HttpsError("invalid-argument", "You cannot use your own ID as an invitation code.");
+  }
+
+  return {
+    valid: true,
+    inviterUid: inviterDoc.id,
+    inviterName: inviterData.fullName || "User",
+  };
 });
 
 // ─── 2. Submit Deposit ───────────────────────────────────────────────────────

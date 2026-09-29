@@ -79,11 +79,18 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
             Expanded(
               child: usersAsync.when(
                 data: (users) {
+                  final userMap = {for (var u in users) u.uid: u};
+
                   final filtered = users.where((u) {
                     if (_query.isEmpty) return true;
+                    final inviter = userMap[u.invitedByUserId];
+                    final inviterId7 = inviter?.userId7 ?? u.invitedByUserId ?? '';
+                    final inviterName = inviter?.fullName.toLowerCase() ?? '';
                     return u.fullName.toLowerCase().contains(_query) ||
                         u.email.toLowerCase().contains(_query) ||
-                        u.userId7.contains(_query);
+                        u.userId7.contains(_query) ||
+                        inviterId7.contains(_query) ||
+                        inviterName.contains(_query);
                   }).toList();
 
                   if (filtered.isEmpty) {
@@ -99,8 +106,10 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, i) {
                       final user = filtered[i];
+                      final inviter = userMap[user.invitedByUserId];
                       return _UserListTile(
                         user: user,
+                        inviter: inviter,
                         onTap: () => context.go('/admin/users/${user.uid}'),
                       );
                     },
@@ -124,15 +133,20 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
 
 class _UserListTile extends StatelessWidget {
   final UserModel user;
+  final UserModel? inviter;
   final VoidCallback onTap;
 
   const _UserListTile({
     required this.user,
+    this.inviter,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final inviterId7 = inviter?.userId7 ?? user.invitedByUserId;
+    final inviterName = inviter?.fullName;
+
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(14),
@@ -211,6 +225,39 @@ class _UserListTile extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (inviterId7 != null && inviterId7.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.2),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.card_giftcard_rounded,
+                          size: 13,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Invited by: ${inviterName != null ? "$inviterName " : ""}(ID: $inviterId7)',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
             trailing: Row(
@@ -234,3 +281,4 @@ class _UserListTile extends StatelessWidget {
     );
   }
 }
+

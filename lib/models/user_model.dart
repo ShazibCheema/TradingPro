@@ -14,6 +14,7 @@ class UserModel {
   final double profit;
   final bool mustChangePassword;
   final bool isTemporaryPassword;
+  final String? invitedByUserId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -29,6 +30,7 @@ class UserModel {
     required this.profit,
     this.mustChangePassword = false,
     this.isTemporaryPassword = false,
+    this.invitedByUserId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -56,6 +58,7 @@ class UserModel {
           data['isTemporaryPassword'] as bool? ??
           false,
       isTemporaryPassword: data['isTemporaryPassword'] as bool? ?? false,
+      invitedByUserId: data['invitedByUserId'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -72,6 +75,7 @@ class UserModel {
       'profit': profit,
       'mustChangePassword': mustChangePassword,
       'isTemporaryPassword': isTemporaryPassword,
+      if (invitedByUserId != null) 'invitedByUserId': invitedByUserId,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -97,6 +101,7 @@ class UserModel {
       profit: profit ?? this.profit,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       isTemporaryPassword: isTemporaryPassword ?? this.isTemporaryPassword,
+      invitedByUserId: invitedByUserId,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

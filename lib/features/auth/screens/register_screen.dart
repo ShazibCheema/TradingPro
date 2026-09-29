@@ -22,10 +22,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+  final _inviteCtrl = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _isLoading = false;
+  bool _isValidatingCode = false;
   String? _error;
+  String? _inviteCodeError;
+  String? _validatedInviterUid;  // set after successful validation
 
   @override
   void dispose() {
@@ -33,11 +37,62 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
+    _inviteCtrl.dispose();
     super.dispose();
+  }
+
+  /// Validates the invitation code field in real-time.
+  Future<void> _validateInviteCode(String value) async {
+    final code = value.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _inviteCodeError = null;
+        _validatedInviterUid = null;
+      });
+      return;
+    }
+    setState(() {
+      _isValidatingCode = true;
+      _inviteCodeError = null;
+      _validatedInviterUid = null;
+    });
+    try {
+      final uid = await ref.read(authRepositoryProvider).validateInvitationCode(
+            code: code,
+            currentEmail: _emailCtrl.text.trim().isNotEmpty
+                ? _emailCtrl.text.trim()
+                : null,
+          );
+      if (mounted) {
+        setState(() {
+          _validatedInviterUid = uid;
+          _inviteCodeError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _inviteCodeError = e.toString().replaceFirst('Exception: ', '');
+          _validatedInviterUid = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isValidatingCode = false);
+    }
   }
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Block if invitation code is entered but invalid
+    final inviteCode = _inviteCtrl.text.trim();
+    if (inviteCode.isNotEmpty && _inviteCodeError != null) return;
+    if (inviteCode.isNotEmpty && _validatedInviterUid == null && !_isValidatingCode) {
+      // Trigger one final validation attempt
+      await _validateInviteCode(inviteCode);
+      if (_inviteCodeError != null) return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -47,6 +102,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             email: _emailCtrl.text.trim(),
             password: _passwordCtrl.text,
             fullName: _nameCtrl.text.trim(),
+            invitedByUserId:
+                inviteCode.isNotEmpty ? _validatedInviterUid : null,
           );
       if (mounted) {
         AppSnackbar.showSuccess(context, 'Account created successfully! Welcome to TradingPro.');
@@ -151,8 +208,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     TextFormField(
                       controller: _confirmCtrl,
                       obscureText: _obscureConfirm,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _register(),
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'Confirm Password',
                         prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -168,6 +224,44 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       validator: (v) =>
                           AppValidators.confirmPassword(v, _passwordCtrl.text),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Optional Invitation Code ─────────────────────────────
+                    TextFormField(
+                      controller: _inviteCtrl,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      maxLength: 7,
+                      onChanged: _validateInviteCode,
+                      onFieldSubmitted: (_) => _register(),
+                      decoration: InputDecoration(
+                        labelText: 'Invitation Code (Optional)',
+                        helperText: 'Enter your referrer\'s 7-digit User ID',
+                        prefixIcon: const Icon(Icons.card_giftcard_rounded),
+                        counterText: '',
+                        suffixIcon: _isValidatingCode
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                ),
+                              )
+                            : _inviteCtrl.text.isNotEmpty
+                                ? Icon(
+                                    _inviteCodeError == null
+                                        ? Icons.check_circle_outline_rounded
+                                        : Icons.error_outline_rounded,
+                                    color: _inviteCodeError == null
+                                        ? Colors.green
+                                        : Colors.red,
+                                  )
+                                : null,
+                        errorText: _inviteCodeError,
+                      ),
                     ),
 
                     if (_error != null) ...[

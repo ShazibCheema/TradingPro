@@ -1,7 +1,9 @@
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tradingpro/providers/app_providers.dart';
 import 'package:tradingpro/core/theme/app_colors.dart';
 import 'package:tradingpro/core/theme/app_text_styles.dart';
@@ -716,6 +718,14 @@ class _AdminUserDetailScreenState
                       ),
                       const SizedBox(height: 24),
                       const Divider(height: 0),
+                      const SizedBox(height: 16),
+                      // ── Invited By ─────────────────────────────────────────
+                      if (user.invitedByUserId != null)
+                        _InvitedByRow(inviterUid: user.invitedByUserId!),
+                      // ── Invited Users ──────────────────────────────────────
+                      _InvitedUsersRow(userId: user.uid, userId7: user.userId7),
+                      const SizedBox(height: 12),
+                      const Divider(height: 0),
                       const SizedBox(height: 20),
                       Row(
                         children: [
@@ -933,3 +943,183 @@ class _AdminUserDetailScreenState
     );
   }
 }
+
+// ─── Invited By Row ──────────────────────────────────────────────────────────
+
+class _InvitedByRow extends StatelessWidget {
+  final String inviterUid;
+  const _InvitedByRow({required this.inviterUid});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _fetchInviterData(inviterUid),
+      builder: (context, snapshot) {
+        String inviterName = 'Loading…';
+        String inviterId7 = inviterUid;
+        String? targetUid;
+
+        if (snapshot.hasData && snapshot.data != null) {
+          final d = snapshot.data!;
+          inviterName = d['fullName'] as String? ?? 'Unknown';
+          inviterId7 = d['userId7'] as String? ?? inviterUid;
+          targetUid = d['uid'] as String?;
+        } else if (snapshot.connectionState == ConnectionState.done) {
+          inviterName = 'User';
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.card_giftcard_rounded,
+                  size: 16, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: targetUid != null && targetUid.isNotEmpty
+                      ? () => context.go('/admin/users/$targetUid')
+                      : null,
+
+                  child: RichText(
+                    text: TextSpan(
+                      style: AppTextStyles.bodySmall,
+                      children: [
+                        TextSpan(
+                          text: 'Invited by: ',
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textSecondary),
+                        ),
+                        TextSpan(
+                          text: '$inviterName (ID: $inviterId7)',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                            decoration: targetUid != null
+                                ? TextDecoration.underline
+                                : TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  static Future<Map<String, dynamic>?> _fetchInviterData(String inviterUid) async {
+    try {
+      // 1. Try document ID first
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(inviterUid)
+          .get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        data['uid'] = doc.id;
+        return data;
+      }
+
+      // 2. Try userId7 query (string or int)
+      final intCode = int.tryParse(inviterUid);
+      var query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('userId7', isEqualTo: inviterUid)
+          .limit(1)
+          .get();
+      if (query.docs.isEmpty && intCode != null) {
+        query = await FirebaseFirestore.instance
+            .collection('users')
+            .where('userId7', isEqualTo: intCode)
+            .limit(1)
+            .get();
+      }
+      if (query.docs.isNotEmpty) {
+        final data = query.docs.first.data();
+        data['uid'] = query.docs.first.id;
+        return data;
+      }
+    } catch (_) {}
+    return null;
+  }
+}
+
+// ─── Invited Users Row ───────────────────────────────────────────────────────
+
+class _InvitedUsersRow extends StatelessWidget {
+  final String userId;
+  final String userId7;
+  const _InvitedUsersRow({required this.userId, required this.userId7});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('invitedByUserId', whereIn: [
+            userId,
+            if (userId7.isNotEmpty) userId7,
+          ])
+          .snapshots(),
+      builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+        if (docs.isEmpty &&
+            snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.people_outline_rounded,
+                      size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Invited Users (${docs.length}):',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: docs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  final name = data['fullName'] ?? 'Unknown';
+                  final id7 = data['userId7'] ?? '';
+                  final uid = d.id;
+
+                  return ActionChip(
+                    avatar: const Icon(Icons.person_rounded, size: 14, color: AppColors.primary),
+                    label: Text('$name (ID: $id7)'),
+                    labelStyle: AppTextStyles.caption.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    backgroundColor: AppColors.primaryContainer.withValues(alpha: 0.4),
+                    side: BorderSide.none,
+                    onPressed: () => context.go('/admin/users/$uid'),
+
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
